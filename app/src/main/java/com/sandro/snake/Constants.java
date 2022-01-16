@@ -26,6 +26,7 @@ public class Constants {
     public static final int FROG_SIZE = CELL_SIZE * 2 / 3;
     public static final int FROG_COORD_ADJUSTMENT = HALF_CELL - FROG_SIZE / 2;
     public static final int FROG_NUMBER = 200;
+    public static final int FROG_RESPAWN_DELAY = 3;
 
     public static final int MIN_BODY_SIZE = 2;
 

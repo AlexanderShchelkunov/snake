@@ -6,7 +6,6 @@ import com.sandro.snake.model.FieldContent;
 import com.sandro.snake.model.Frog;
 import com.sandro.snake.model.Snake;
 import com.sandro.snake.model.SnakeBody;
-import com.sandro.snake.model.exceptions.FrogIsDeadException;
 import com.sandro.snake.model.exceptions.GameLostException;
 import com.sandro.snake.view.ControlPanelView;
 import com.sandro.snake.view.GameFieldView;
@@ -14,7 +13,6 @@ import com.sandro.snake.view.MainView;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -46,7 +44,6 @@ public class GameController {
     private List<Frog> frogs;
 
     private Future<?> snakeFuture;
-    private List<Future<?>> frogFutures;
 
     public void init() {
         executorService = Executors.newScheduledThreadPool(1 + FROG_NUMBER);
@@ -78,7 +75,7 @@ public class GameController {
         paused = false;
         controlPanelView.updateScore(score);
         snakeFuture = executorService.submit(snakeController);
-        frogFutures = frogControllers.values().stream().map(executorService::submit).collect(Collectors.toList());
+        frogControllers.values().stream().map(executorService::submit).collect(Collectors.toList());
         updateGameState();
     }
 
@@ -86,7 +83,7 @@ public class GameController {
         gameExecutor.submit(() -> {
             while (true) {
                 try {
-                    Thread.currentThread().sleep(10);
+                    Thread.sleep(10);
                     if (paused) {
                         synchronized (this) {
                             this.wait();
@@ -102,8 +99,6 @@ public class GameController {
                     endGame();
                     return;
                 }
-
-                updateFrogs(frogFutures);
             }
         });
     }
@@ -130,19 +125,7 @@ public class GameController {
         }
     }
 
-    private void updateFrogs(List<Future<?>> frogFutures) {
-        ListIterator<Future<?>> frogFeaturesIterator = frogFutures.listIterator();
-        while (frogFeaturesIterator.hasNext()) {
-            Future<?> frogFuture = frogFeaturesIterator.next();
-            if (frogFuture.isDone()) {
-                frogFeaturesIterator.remove();
-                logFrogException(frogFuture);
-                respawnFrog(frogFeaturesIterator);
-            }
-        }
-    }
-
-    private void respawnFrog(ListIterator<Future<?>> frogFeaturesIterator) {
+    private void respawnFrog() {
         List<Integer> possibleFrogCells = IntStream.range(SNAKE_INITIAL_SIZE, CELL_COUNT_HORIZONTALLY * CELL_COUNT_VERTICALLY - 1)
                 .boxed()
                 .collect(Collectors.toList());
@@ -159,22 +142,11 @@ public class GameController {
                     FrogController frogController = new FrogController(frog, cells, gameFieldView);
                     cell.setContent(frog);
                     addFrogController(frogController);
-                    Future<?> newFrogFuture = executorService.schedule(frogController, 3, TimeUnit.SECONDS);
-                    frogFeaturesIterator.add(newFrogFuture);
+                    executorService.schedule(frogController, FROG_RESPAWN_DELAY, TimeUnit.SECONDS);
                     break;
                 } finally {
                     lock.unlock();
                 }
-            }
-        }
-    }
-
-    private void logFrogException(Future<?> frogFuture) {
-        try {
-            frogFuture.get();
-        } catch (Exception e) {
-            if (e.getCause() != null && !(e.getCause() instanceof FrogIsDeadException)) {
-                e.getCause().printStackTrace();
             }
         }
     }
@@ -206,6 +178,8 @@ public class GameController {
         } else {
             System.err.println("Controller for frog not found. Id = " + frog.getId());
         }
+
+        respawnFrog();
     }
 
     private void addFrogController(FrogController frogController) {
